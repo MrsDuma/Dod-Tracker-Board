@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Democracy of Dreams · Board</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0D1117; color: #E6EDF3; font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size: 14px; min-height: 100vh; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: #30363D; border-radius: 4px; }
+
+/* SETUP SCREEN */
+#setup { display:none; position:fixed; inset:0; background:#0D1117; z-index:200; align-items:center; justify-content:center; }
+#setup.visible { display:flex; }
+.setup-box { background:#161B22; border:1px solid #30363D; border-radius:16px; padding:32px; width:460px; max-width:95vw; }
+.setup-box h2 { font-size:20px; font-weight:800; margin-bottom:6px; }
+.setup-box p  { font-size:13px; color:#8B949E; margin-bottom:24px; line-height:1.6; }
+.setup-box a  { color:#3B82F6; }
+
+/* HEADER */
+#header { background:#161B22; border-bottom:1px solid #30363D; padding:14px 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; position:sticky; top:0; z-index:10; }
+#header h1 { font-size:20px; font-weight:800; letter-spacing:-0.4px; }
+#header .sub { font-size:11px; color:#8B949E; margin-top:2px; }
+.stat-chip { display:flex; align-items:center; gap:4px; background:#0D1117; border:1px solid #30363D; border-radius:8px; padding:4px 10px; font-size:12px; font-weight:700; }
+#addBtn { background:#F59E0B; border:none; color:#0D1117; border-radius:9px; padding:8px 16px; font-weight:800; font-size:13px; cursor:pointer; }
+
+/* FILTER BAR */
+#filterbar { background:#161B22; border-bottom:1px solid #21262D; padding:0 20px; display:flex; align-items:center; overflow-x:auto; gap:0; white-space:nowrap; }
+.filter-label { font-size:10px; color:#6B7280; font-weight:700; letter-spacing:.8px; margin-right:6px; flex-shrink:0; }
+.ftab { background:none; border:none; border-bottom:2px solid transparent; color:#8B949E; padding:10px 10px 8px; font-size:12px; cursor:pointer; white-space:nowrap; transition:color .15s; }
+.ftab.active { font-weight:700; }
+.filter-divider { width:1px; height:24px; background:#30363D; margin:0 8px; flex-shrink:0; }
+
+/* BOARD */
+#board { display:flex; gap:10px; padding:14px 16px 48px; overflow-x:auto; align-items:flex-start; }
+.col { flex:0 0 242px; min-width:242px; background:#161B22; border:1px solid #21262D; border-radius:12px; display:flex; flex-direction:column; transition:border-color .15s, background .15s; }
+.col.drag-over { background:#1a1f28; }
+.col-header { padding:12px 12px 10px; border-bottom-width:2px; border-bottom-style:solid; display:flex; align-items:center; justify-content:space-between; }
+.col-title { display:flex; align-items:center; gap:7px; font-weight:700; font-size:13px; }
+.col-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.col-count { border-radius:99px; padding:1px 8px; font-size:11px; font-weight:700; }
+.col-cards { padding:8px; display:flex; flex-direction:column; gap:7px; flex:1; }
+.col-empty { text-align:center; color:#374151; font-size:12px; padding:24px 0; border:1px dashed #21262D; border-radius:8px; }
+.col-add { background:none; border:none; color:#6B7280; cursor:pointer; font-size:12px; width:100%; padding:6px; display:flex; align-items:center; justify-content:center; gap:4px; margin:0 0 8px; }
+
+/* CARDS */
+.card { background:#0D1117; border:1px solid #21262D; border-radius:10px; padding:10px 10px 7px; }
+.card-top { display:flex; align-items:flex-start; gap:6px; }
+.card-rag { width:8px; height:8px; border-radius:50%; margin-top:3px; flex-shrink:0; }
+.card-title { flex:1; font-weight:600; font-size:12px; line-height:1.45; }
+.card-btn { background:none; border:none; color:#6B7280; cursor:pointer; font-size:12px; padding:0 2px; line-height:1; }
+.card-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:7px; padding-left:14px; }
+.card-date { font-size:10px; color:#6B7280; margin-top:5px; padding-left:14px; }
+.card-desc { font-size:11px; color:#8B949E; margin-top:6px; padding-left:14px; line-height:1.5; border-top:1px solid #21262D; padding-top:6px; }
+.card-footer { display:flex; align-items:center; justify-content:space-between; margin-top:7px; padding-top:6px; border-top:1px solid #1a1f27; flex-wrap:wrap; gap:3px; }
+.move-btn { background:none; border-width:1px; border-style:solid; border-radius:4px; padding:1px 5px; font-size:9px; cursor:pointer; }
+.expand-btn { background:none; border:none; color:#6B7280; cursor:pointer; font-size:10px; }
+.pill { border-radius:99px; padding:1px 7px; font-size:10px; font-weight:700; white-space:nowrap; border-width:1px; border-style:solid; }
+
+/* MODAL */
+.overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:50; align-items:center; justify-content:center; padding:16px; }
+.overlay.open { display:flex; }
+.modal { background:#161B22; border:1px solid #30363D; border-radius:16px; padding:28px; width:540px; max-width:100%; max-height:92vh; overflow-y:auto; }
+.modal h2 { font-size:20px; font-weight:800; margin-bottom:22px; }
+.field-label { font-size:11px; color:#8B949E; font-weight:700; letter-spacing:.5px; margin-bottom:6px; text-transform:uppercase; }
+.inp { background:#0D1117; border:1px solid #30363D; color:#E6EDF3; border-radius:8px; padding:8px 12px; font-size:13px; outline:none; width:100%; font-family:inherit; }
+.inp:focus { border-color:#3B82F6; }
+.type-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:20px; }
+.type-btn { background:#0D1117; border:1.5px solid #30363D; border-radius:10px; padding:12px 8px; cursor:pointer; color:#E6EDF3; text-align:center; }
+.type-btn.active { background:#1a2640; border-color:#3B82F6; }
+.type-icon { font-size:22px; margin-bottom:4px; }
+.type-name { font-weight:700; font-size:13px; }
+.type-desc { font-size:10px; color:#6B7280; margin-top:2px; }
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px; }
+.stream-row { display:flex; gap:8px; margin-bottom:18px; }
+.stream-btn { background:#0D1117; border:1.5px solid #30363D; color:#8B949E; border-radius:8px; padding:7px 18px; cursor:pointer; font-weight:700; font-size:12px; }
+.stream-btn.active { background:#F59E0B22; border-color:#F59E0B; color:#F59E0B; }
+.rag-row { display:flex; gap:6px; }
+.rag-btn { background:#0D1117; border:1.5px solid #30363D; border-radius:8px; padding:6px 8px; cursor:pointer; display:flex; align-items:center; flex-direction:column; gap:4px; }
+.rag-dot { width:10px; height:10px; border-radius:50%; }
+.rag-lbl { font-size:9px; color:#6B7280; font-weight:600; }
+.col-status-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:26px; }
+.col-status-btn { background:#0D1117; border:1.5px solid #30363D; color:#8B949E; border-radius:8px; padding:7px 14px; cursor:pointer; font-weight:600; font-size:12px; }
+.modal-actions { display:flex; justify-content:space-between; align-items:center; }
+.btn { border-radius:8px; padding:8px 18px; font-size:13px; font-weight:700; cursor:pointer; }
+.btn-primary  { background:#F59E0B; color:#0D1117; border:none; }
+.btn-ghost    { background:#21262D; color:#8B949E; border:1px solid #30363D; }
+.btn-danger   { background:#EF4444; color:#fff; border:none; }
+.btn-danger-ghost { background:transparent; color:#EF4444; border:1px solid #EF4444; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+
+/* TOAST */
+#toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#161B22; border:1px solid #30363D; color:#E6EDF3; padding:10px 20px; border-radius:10px; font-size:13px; z-index:100; opacity:0; transition:opacity .3s; pointer-events:none; }
+#toast.show { opacity:1; }
+
+/* LOADING */
+#loading { display:flex; align-items:center; justify-content:center; height:60vh; color:#8B949E; font-size:14px; }
+</style>
+
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+
+<div id="setup">
+  <div class="setup-box">
+    <h2>🗳️ Connect your database</h2>
+    <p>Enter your Supabase credentials below. You only do this once.<br>
+    Get them from <a href="https://supabase.com" target="_blank">supabase.com</a> → your project → <strong>Settings → API</strong></p>
+    <div style="margin-bottom:14px">
+      <div class="field-label">Supabase Project URL</div>
+      <input class="inp" id="s-url" placeholder="https://xxxxx.supabase.co" style="margin-bottom:4px" />
+    </div>
+    <div style="margin-bottom:20px">
+      <div class="field-label">Supabase Anon Key</div>
+      <input class="inp" id="s-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5..." />
+    </div>
+    <div style="margin-bottom:16px;padding:12px;background:#0D1117;border-radius:8px;font-size:12px;color:#8B949E;line-height:1.7">
+      <strong style="color:#E6EDF3">Also run this SQL in Supabase:</strong><br>
+      Supabase → <strong>Table Editor</strong> → <strong>SQL</strong> tab (or search "SQL Editor" in sidebar)
+      <div style="margin-top:8px;padding:8px;background:#161B22;border-radius:6px;font-family:monospace;font-size:11px;color:#58A6FF;overflow-x:auto;white-space:pre">CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  type TEXT DEFAULT 'task',
+  title TEXT NOT NULL,
+  owner TEXT, track TEXT, stream TEXT,
+  description TEXT, due_date TEXT,
+  rag TEXT, column_id TEXT DEFAULT 'backlog',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ
+);
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_all" ON tasks
+  FOR ALL USING (true) WITH CHECK (true);
+ALTER PUBLICATION supabase_realtime ADD TABLE tasks;</div>
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="saveConfig()">Connect &amp; Open Board</button>
+    <div id="setup-error" style="color:#EF4444;font-size:12px;margin-top:10px;display:none"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+
+<div id="app" style="display:none">
+
+  <!-- HEADER -->
+
+  <div id="header">
+    <div>
+      <h1>Democracy of Dreams</h1>
+      <div class="sub" id="subtitle">Loading…</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div id="err-banner" style="display:none;font-size:11px;color:#EF4444;background:#EF444422;padding:4px 10px;border-radius:6px"></div>
+      <div class="stat-chip"><span>⚡</span><span id="stat-pct" style="color:#F59E0B">0%</span></div>
+      <div class="stat-chip"><span>🔴</span><span id="stat-blocked" style="color:#EF4444">0</span></div>
+      <div class="stat-chip"><span>📋</span><span id="stat-total" style="color:#8B949E">0</span></div>
+      <button id="addBtn" onclick="openAdd()">+ Add</button>
+    </div>
+  </div>
+
+  <!-- FILTER BAR -->
+
+  <div id="filterbar"></div>
+
+  <!-- BOARD -->
+
+  <div id="board"><div id="loading">Loading board…</div></div>
+
+</div>
+
+<!-- TASK MODAL -->
+
+<div class="overlay" id="modal-overlay">
+  <div class="modal" id="modal-box">
+    <h2 id="modal-title">New Task</h2>
+
+```
+<div class="field-label">TYPE</div>
+<div class="type-grid" id="type-grid"></div>
+
+<div class="field-label">TITLE</div>
+<input class="inp" id="f-title" placeholder="Task title…" style="margin-bottom:18px" />
+
+<div class="two-col">
+  <div>
+    <div class="field-label">OWNER</div>
+    <select class="inp" id="f-owner" onchange="ownerOverridden=true"></select>
+    <div id="owner-preview" style="margin-top:6px"></div>
+  </div>
+  <div>
+    <div class="field-label">TRACK</div>
+    <select class="inp" id="f-track" onchange="trackChanged(this.value)"></select>
+    <div id="track-preview" style="margin-top:6px"></div>
+  </div>
+</div>
+
+<div id="stream-section" style="display:none;margin-bottom:18px">
+  <div class="field-label">REVENUE STREAM</div>
+  <div class="stream-row" id="stream-row"></div>
+</div>
+
+<div class="field-label">DESCRIPTION (optional)</div>
+<textarea class="inp" id="f-desc" placeholder="Add context, links, or notes…" rows="3" style="resize:vertical;margin-bottom:18px"></textarea>
+
+<div class="two-col" style="margin-bottom:18px">
+  <div>
+    <div class="field-label">DUE DATE</div>
+    <input type="date" class="inp" id="f-due" />
+  </div>
+  <div>
+    <div class="field-label">RAG STATUS (auto · override)</div>
+    <div class="rag-row" id="rag-row"></div>
+  </div>
+</div>
+
+<div class="field-label">STATUS / COLUMN</div>
+<div class="col-status-row" id="col-status-row"></div>
+
+<div class="modal-actions">
+  <div><button class="btn btn-danger-ghost" id="del-btn" onclick="confirmDelete()" style="display:none">Delete task</button></div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="save-btn" onclick="saveTask()">Save Changes</button>
+  </div>
+</div>
+```
+
+  </div>
+</div>
+
+<!-- DELETE CONFIRM -->
+
+<div class="overlay" id="del-overlay">
+  <div class="modal" style="width:380px">
+    <div style="font-weight:700;font-size:16px;margin-bottom:8px">Delete task?</div>
+    <div style="color:#8B949E;margin-bottom:22px;font-size:13px">
+      "<span id="del-name" style="color:#E6EDF3;font-weight:600"></span>" will be permanently removed for everyone.
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-ghost" onclick="closeDelOverlay()">Cancel</button>
+      <button class="btn btn-danger" onclick="deleteTask()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+
+<div id="toast"></div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+
+const TEAM = [
+  { id:"sarah",    label:"Sarah",    color:"#EC4899" },
+  { id:"philena",  label:"Philena",  color:"#8B5CF6" },
+  { id:"peter",    label:"Peter",    color:"#F59E0B" },
+  { id:"candy",    label:"Candy",    color:"#10B981" },
+  { id:"everyone", label:"Everyone", color:"#06B6D4" },
+];
+
+const TRACKS = [
+  { id:"foundation",label:"Foundation & Legal",short:"LEGAL",    color:"#10B981",defaultOwner:"philena" },
+  { id:"finance",   label:"Finance & Ops",      short:"FINANCE",  color:"#6366F1",defaultOwner:"philena" },
+  { id:"investor",  label:"Investor & Partner", short:"INVESTOR", color:"#8B5CF6",defaultOwner:"peter"   },
+  { id:"revenue",   label:"Revenue",             short:"REVENUE",  color:"#F59E0B",defaultOwner:"philena" },
+  { id:"tech",      label:"Tech",                short:"TECH",     color:"#3B82F6",defaultOwner:"sarah"   },
+  { id:"gtm",       label:"GTM & Comms",         short:"GTM",      color:"#EC4899",defaultOwner:"sarah"   },
+  { id:"product",   label:"Product Build",       short:"PRODUCT",  color:"#F97316",defaultOwner:"peter"   },
+  { id:"team",      label:"Team",                short:"TEAM",     color:"#06B6D4",defaultOwner:"everyone"},
+  { id:"community", label:"Community",           short:"COMMUNITY",color:"#84CC16",defaultOwner:"candy"   },
+];
+
+const REVENUE_STREAMS = ["MVP","Product","Data"];
+
+const COLUMNS = [
+  { id:"backlog",    label:"Backlog",     color:"#6B7280" },
+  { id:"thisweek",  label:"This Week",   color:"#3B82F6" },
+  { id:"inprogress",label:"In Progress", color:"#F59E0B" },
+  { id:"blocked",   label:"Blocked",     color:"#EF4444" },
+  { id:"done",      label:"Done",        color:"#10B981" },
+];
+
+const TASK_TYPES = [
+  { id:"task",      label:"Task",      icon:"✓",  desc:"Regular action item" },
+  { id:"goal",      label:"Goal",      icon:"🎯", desc:"Outcome to achieve"  },
+  { id:"milestone", label:"Milestone", icon:"🏁", desc:"Key checkpoint"      },
+];
+
+const RAG_OPTIONS = [
+  { id:"ontrack",label:"On track",color:"#10B981" },
+  { id:"atrisk", label:"At risk", color:"#F59E0B" },
+  { id:"blocked",label:"Blocked", color:"#EF4444" },
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+
+let tasks         = [];
+let supabaseClient = null;
+let filterTrack   = "all";
+let filterOwner   = "all";
+let editingId     = null;
+let ownerOverridden = false;
+let currentType   = "task";
+let currentRag    = "";
+let currentColId  = "backlog";
+let currentStream = "";
+let expandedCards = new Set();
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+
+window.addEventListener("DOMContentLoaded", () => {
+  const url = localStorage.getItem("sb_url");
+  const key = localStorage.getItem("sb_key");
+  if (url && key) {
+    initSupabase(url, key);
+  } else {
+    document.getElementById("setup").classList.add("visible");
+  }
+});
+
+function saveConfig() {
+  const url = document.getElementById("s-url").value.trim();
+  const key = document.getElementById("s-key").value.trim();
+  if (!url || !key) { showSetupError("Please fill in both fields"); return; }
+  localStorage.setItem("sb_url", url);
+  localStorage.setItem("sb_key", key);
+  initSupabase(url, key);
+}
+
+function showSetupError(msg) {
+  const el = document.getElementById("setup-error");
+  el.textContent = msg; el.style.display = "block";
+}
+
+async function initSupabase(url, key) {
+  try {
+    supabaseClient = window.supabase.createClient(url, key);
+    document.getElementById("setup").classList.remove("visible");
+    document.getElementById("app").style.display = "block";
+    buildFilterBar();
+    buildModalParts();
+    await loadTasks();
+    subscribeRealtime();
+  } catch(e) {
+    showSetupError("Connection failed: " + e.message);
+  }
+}
+
+// ── LOAD + REALTIME ───────────────────────────────────────────────────────────
+
+async function loadTasks() {
+  const { data, error } = await supabaseClient
+    .from("tasks").select("*").order("created_at", { ascending: true });
+  if (error) { showErr(error.message); return; }
+  tasks = data || [];
+  renderAll();
+}
+
+function subscribeRealtime() {
+  supabaseClient.channel("tasks-live")
+    .on("postgres_changes", { event:"*", schema:"public", table:"tasks" }, payload => {
+      if (payload.eventType === "INSERT") {
+        if (!tasks.find(t => t.id === payload.new.id)) tasks.push(payload.new);
+      } else if (payload.eventType === "UPDATE") {
+        tasks = tasks.map(t => t.id === payload.new.id ? payload.new : t);
+      } else if (payload.eventType === "DELETE") {
+        tasks = tasks.filter(t => t.id !== payload.old.id);
+      }
+      renderAll();
+    })
+    .subscribe();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+
+function renderAll() {
+  updateHeader();
+  renderBoard();
+}
+
+function updateHeader() {
+  const total     = tasks.length;
+  const done      = tasks.filter(t => t.column_id === "done").length;
+  const blockedCt = tasks.filter(t => calcRag(t) === "blocked").length;
+  const pct       = total ? Math.round((done/total)*100) : 0;
+  document.getElementById("stat-pct").textContent     = pct + "%";
+  document.getElementById("stat-blocked").textContent = blockedCt;
+  document.getElementById("stat-total").textContent   = total;
+  const now = new Date();
+  document.getElementById("subtitle").textContent =
+    "v1.0 · " + now.toLocaleString("en-GB",{month:"long",year:"numeric"});
+}
+
+function getVisible() {
+  return tasks.filter(t => {
+    if (filterTrack !== "all" && t.track !== filterTrack) return false;
+    if (filterOwner !== "all" && t.owner !== filterOwner) return false;
+    return true;
+  });
+}
+
+function renderBoard() {
+  const board = document.getElementById("board");
+  const visible = getVisible();
+  board.innerHTML = "";
+
+  COLUMNS.forEach(col => {
+    const cards = visible.filter(t => t.column_id === col.id);
+    const colEl = document.createElement("div");
+    colEl.className = "col";
+    colEl.dataset.colId = col.id;
+    colEl.style.borderColor = "#21262D";
+
+    colEl.addEventListener("dragover", e => { e.preventDefault(); colEl.classList.add("drag-over"); });
+    colEl.addEventListener("dragleave", () => colEl.classList.remove("drag-over"));
+    colEl.addEventListener("drop", e => { e.preventDefault(); colEl.classList.remove("drag-over"); handleDrop(col.id); });
+
+    colEl.innerHTML = `
+      <div class="col-header" style="border-bottom-color:${col.color}">
+        <div class="col-title">
+          <div class="col-dot" style="background:${col.color}"></div>
+          ${col.label}
+        </div>
+        <span class="col-count" style="background:${col.color}22;color:${col.color};border-color:${col.color}44">${cards.length}</span>
+      </div>
+      <div class="col-cards" id="cards-${col.id}">
+        ${cards.length === 0 ? '<div class="col-empty">Empty</div>' : ""}
+      </div>
+      <button class="col-add" onclick="openAdd('${col.id}')">
+        <span style="font-size:16px;line-height:1">+</span> Add
+      </button>`;
+
+    board.appendChild(colEl);
+
+    const cardsEl = colEl.querySelector(`#cards-${col.id}`);
+    cards.forEach(task => cardsEl.appendChild(buildCard(task)));
+  });
+}
+
+function buildCard(task) {
+  const ragId    = calcRag(task);
+  const ragColor = RAG_OPTIONS.find(r => r.id === ragId)?.color || "#10B981";
+  const isExp    = expandedCards.has(task.id);
+  const otherCols = COLUMNS.filter(c => c.id !== task.column_id);
+
+  const div = document.createElement("div");
+  div.className = "card";
+  div.draggable = true;
+  div.addEventListener("dragstart", () => { window._dragId = task.id; });
+
+  const moveBtns = otherCols.map(c =>
+    `<button class="move-btn" style="border-color:${c.color}33;color:${c.color}" onclick="moveTask('${task.id}','${c.id}')">→ ${c.label}</button>`
+  ).join("");
+
+  const trackInfo = TRACKS.find(t => t.id === task.track);
+  const ownerInfo = TEAM.find(t => t.id === task.owner);
+
+  const trackPill = trackInfo
+    ? `<span class="pill" style="background:${trackInfo.color}22;color:${trackInfo.color};border-color:${trackInfo.color}44">${trackInfo.short}${task.stream ? " · "+task.stream : ""}</span>`
+    : "";
+  const ownerPill = ownerInfo
+    ? `<span class="pill" style="background:${ownerInfo.color}22;color:${ownerInfo.color};border-color:${ownerInfo.color}44">${ownerInfo.label}</span>`
+    : "";
+
+  div.innerHTML = `
+    <div class="card-top">
+      <div class="card-rag" style="background:${ragColor};box-shadow:0 0 5px ${ragColor}80"></div>
+      <div class="card-title">${esc(task.title)}</div>
+      <button class="card-btn" onclick="openEdit('${task.id}')">✏️</button>
+      <button class="card-btn" onclick="promptDelete('${task.id}')">🗑️</button>
+    </div>
+    ${(trackPill || ownerPill) ? `<div class="card-tags">${trackPill}${ownerPill}</div>` : ""}
+    ${task.due_date ? `<div class="card-date">📅 ${fmtDate(task.due_date)}</div>` : ""}
+    ${(isExp && task.description) ? `<div class="card-desc">${esc(task.description)}</div>` : ""}
+    <div class="card-footer">
+      <div style="display:flex;gap:3px;flex-wrap:wrap">${moveBtns}</div>
+      ${task.description ? `<button class="expand-btn" onclick="toggleExpand('${task.id}')">${isExp?"▲":"▼"}</button>` : ""}
+    </div>`;
+
+  return div;
+}
+
+// ── FILTER BAR ────────────────────────────────────────────────────────────────
+
+function buildFilterBar() {
+  const bar = document.getElementById("filterbar");
+  bar.innerHTML = "";
+
+  const addLabel = txt => {
+    const s = document.createElement("span");
+    s.className = "filter-label"; s.textContent = txt;
+    bar.appendChild(s);
+  };
+  const addTab = (id, label, color, type) => {
+    const b = document.createElement("button");
+    b.className = "ftab";
+    b.textContent = label;
+    b.dataset.type = type; b.dataset.id = id;
+    const active = type === "track" ? filterTrack === id : filterOwner === id;
+    if (active) { b.classList.add("active"); b.style.color = color || "#3B82F6"; b.style.borderBottomColor = color || "#3B82F6"; }
+    b.onclick = () => {
+      if (type === "track") { filterTrack = id; } else { filterOwner = id; }
+      buildFilterBar(); renderBoard();
+    };
+    bar.appendChild(b);
+  };
+  const addDivider = () => {
+    const d = document.createElement("div"); d.className = "filter-divider";
+    bar.appendChild(d);
+  };
+
+  addLabel("TRACK");
+  addTab("all","All","#8B949E","track");
+  TRACKS.forEach(t => addTab(t.id, t.label, t.color, "track"));
+  addDivider();
+  addLabel("OWNER");
+  addTab("all","All","#8B949E","owner");
+  TEAM.forEach(t => addTab(t.id, t.label, t.color, "owner"));
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+
+function buildModalParts() {
+  // Type grid
+  const tg = document.getElementById("type-grid");
+  tg.innerHTML = "";
+  TASK_TYPES.forEach(tp => {
+    const b = document.createElement("button");
+    b.className = "type-btn"; b.id = "type-"+tp.id;
+    b.innerHTML = `<div class="type-icon">${tp.icon}</div><div class="type-name">${tp.label}</div><div class="type-desc">${tp.desc}</div>`;
+    b.onclick = () => setType(tp.id);
+    tg.appendChild(b);
+  });
+
+  // Owner dropdown
+  const os = document.getElementById("f-owner");
+  os.innerHTML = '<option value="">Select owner…</option>';
+  TEAM.forEach(t => {
+    const o = document.createElement("option"); o.value = t.id; o.textContent = t.label;
+    os.appendChild(o);
+  });
+  os.addEventListener("change", updateOwnerPreview);
+
+  // Track dropdown
+  const ts = document.getElementById("f-track");
+  ts.innerHTML = '<option value="">Select track…</option>';
+  TRACKS.forEach(t => {
+    const o = document.createElement("option"); o.value = t.id; o.textContent = t.label;
+    ts.appendChild(o);
+  });
+
+  // Stream buttons
+  const sr = document.getElementById("stream-row");
+  REVENUE_STREAMS.forEach(s => {
+    const b = document.createElement("button");
+    b.className = "stream-btn"; b.id = "stream-"+s; b.textContent = s;
+    b.onclick = () => setStream(s);
+    sr.appendChild(b);
+  });
+
+  // RAG buttons
+  const rr = document.getElementById("rag-row");
+  RAG_OPTIONS.forEach(r => {
+    const b = document.createElement("button");
+    b.className = "rag-btn"; b.id = "rag-"+r.id;
+    b.innerHTML = `<div class="rag-dot" style="background:${r.color}"></div><span class="rag-lbl" id="rag-lbl-${r.id}" style="color:#6B7280">${r.label}</span>`;
+    b.onclick = () => setRag(r.id);
+    rr.appendChild(b);
+  });
+
+  // Column status buttons
+  const cr = document.getElementById("col-status-row");
+  COLUMNS.forEach(c => {
+    const b = document.createElement("button");
+    b.className = "col-status-btn"; b.id = "colstatus-"+c.id;
+    b.textContent = c.label;
+    b.onclick = () => setColStatus(c.id);
+    cr.appendChild(b);
+  });
+}
+
+function openAdd(colId = "backlog") {
+  editingId = null; ownerOverridden = false;
+  setType("task"); setRag(""); setColStatus(colId); setStream("");
+  document.getElementById("f-title").value = "";
+  document.getElementById("f-owner").value = "";
+  document.getElementById("f-track").value = "";
+  document.getElementById("f-desc").value = "";
+  document.getElementById("f-due").value = "";
+  document.getElementById("owner-preview").innerHTML = "";
+  document.getElementById("track-preview").innerHTML = "";
+  document.getElementById("stream-section").style.display = "none";
+  document.getElementById("del-btn").style.display = "none";
+  document.getElementById("modal-title").textContent = "New Task";
+  document.getElementById("modal-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("f-title").focus(), 50);
+}
+
+function openEdit(id) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+  editingId = id; ownerOverridden = false;
+  setType(task.type || "task");
+  setRag(task.rag || "");
+  setColStatus(task.column_id || "backlog");
+  setStream(task.stream || "");
+  document.getElementById("f-title").value = task.title || "";
+  document.getElementById("f-owner").value = task.owner || "";
+  document.getElementById("f-track").value = task.track || "";
+  document.getElementById("f-desc").value  = task.description || "";
+  document.getElementById("f-due").value   = task.due_date || "";
+  updateOwnerPreview();
+  updateTrackPreview();
+  if (task.track === "revenue") document.getElementById("stream-section").style.display = "block";
+  else document.getElementById("stream-section").style.display = "none";
+  document.getElementById("del-btn").style.display = "inline-block";
+  document.getElementById("modal-title").textContent = "Edit Task";
+  document.getElementById("modal-overlay").classList.add("open");
+}
+
+function closeModal() {
+  document.getElementById("modal-overlay").classList.remove("open");
+  editingId = null;
+}
+
+function setType(id) {
+  currentType = id;
+  TASK_TYPES.forEach(tp => {
+    const b = document.getElementById("type-"+tp.id);
+    if (b) b.className = "type-btn" + (tp.id === id ? " active" : "");
+  });
+}
+
+function setRag(id) {
+  currentRag = id;
+  RAG_OPTIONS.forEach(r => {
+    const b = document.getElementById("rag-"+r.id);
+    const l = document.getElementById("rag-lbl-"+r.id);
+    if (!b) return;
+    const active = id ? r.id === id : r.id === calcRag({ rag:"", due_date: document.getElementById("f-due")?.value });
+    b.style.background = active ? r.color+"22" : "#0D1117";
+    b.style.borderColor = active ? r.color : "#30363D";
+    if (l) l.style.color = active ? r.color : "#6B7280";
+  });
+}
+
+function setColStatus(id) {
+  currentColId = id;
+  COLUMNS.forEach(c => {
+    const b = document.getElementById("colstatus-"+c.id);
+    if (!b) return;
+    b.style.background   = c.id === id ? c.color+"22" : "#0D1117";
+    b.style.borderColor  = c.id === id ? c.color : "#30363D";
+    b.style.color        = c.id === id ? c.color : "#8B949E";
+  });
+}
+
+function setStream(s) {
+  currentStream = s;
+  REVENUE_STREAMS.forEach(rs => {
+    const b = document.getElementById("stream-"+rs);
+    if (!b) return;
+    b.className = "stream-btn" + (rs === s ? " active" : "");
+  });
+}
+
+function trackChanged(val) {
+  const track = TRACKS.find(t => t.id === val);
+  if (track && !ownerOverridden) {
+    document.getElementById("f-owner").value = track.defaultOwner;
+    updateOwnerPreview();
+  }
+  updateTrackPreview();
+  document.getElementById("stream-section").style.display = val === "revenue" ? "block" : "none";
+  if (val !== "revenue") setStream("");
+}
+
+function updateOwnerPreview() {
+  const id = document.getElementById("f-owner").value;
+  const t  = TEAM.find(x => x.id === id);
+  document.getElementById("owner-preview").innerHTML = t
+    ? `<span class="pill" style="background:${t.color}22;color:${t.color};border-color:${t.color}44">${t.label}</span>` : "";
+}
+
+function updateTrackPreview() {
+  const id = document.getElementById("f-track").value;
+  const t  = TRACKS.find(x => x.id === id);
+  document.getElementById("track-preview").innerHTML = t
+    ? `<span class="pill" style="background:${t.color}22;color:${t.color};border-color:${t.color}44">${t.short}</span>` : "";
+}
+
+async function saveTask() {
+  const title = document.getElementById("f-title").value.trim();
+  if (!title) { document.getElementById("f-title").focus(); return; }
+
+  const btn = document.getElementById("save-btn");
+  btn.disabled = true; btn.textContent = "Saving…";
+
+  const data = {
+    type:        currentType,
+    title,
+    owner:       document.getElementById("f-owner").value,
+    track:       document.getElementById("f-track").value,
+    stream:      currentStream,
+    description: document.getElementById("f-desc").value.trim(),
+    due_date:    document.getElementById("f-due").value,
+    rag:         currentRag,
+    column_id:   currentColId,
+    updated_at:  new Date().toISOString(),
+  };
+
+  let error;
+  if (editingId) {
+    ({ error } = await supabaseClient.from("tasks").update(data).eq("id", editingId));
+  } else {
+    ({ error } = await supabaseClient.from("tasks").insert([{ ...data, id: uid(), created_at: new Date().toISOString() }]));
+  }
+
+  btn.disabled = false; btn.textContent = "Save Changes";
+  if (error) { showErr(error.message); return; }
+  closeModal();
+  showToast(editingId ? "Task updated ✓" : "Task added ✓");
+}
+
+// ── DELETE ────────────────────────────────────────────────────────────────────
+
+let deleteTargetId = null;
+
+function promptDelete(id) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+  deleteTargetId = id;
+  document.getElementById("del-name").textContent = task.title;
+  document.getElementById("del-overlay").classList.add("open");
+}
+
+function confirmDelete() {
+  if (!editingId) return;
+  promptDelete(editingId);
+  closeModal();
+}
+
+function closeDelOverlay() {
+  document.getElementById("del-overlay").classList.remove("open");
+  deleteTargetId = null;
+}
+
+async function deleteTask() {
+  if (!deleteTargetId) return;
+  tasks = tasks.filter(t => t.id !== deleteTargetId);
+  renderAll();
+  await supabaseClient.from("tasks").delete().eq("id", deleteTargetId);
+  closeDelOverlay();
+  showToast("Task deleted");
+}
+
+// ── MOVE / DRAG ───────────────────────────────────────────────────────────────
+
+async function moveTask(taskId, colId) {
+  tasks = tasks.map(t => t.id === taskId ? { ...t, column_id: colId } : t);
+  renderAll();
+  await supabaseClient.from("tasks").update({ column_id: colId, updated_at: new Date().toISOString() }).eq("id", taskId);
+}
+
+function handleDrop(colId) {
+  const id = window._dragId;
+  if (id) { moveTask(id, colId); window._dragId = null; }
+}
+
+// ── EXPAND ────────────────────────────────────────────────────────────────────
+
+function toggleExpand(id) {
+  if (expandedCards.has(id)) expandedCards.delete(id);
+  else expandedCards.add(id);
+  renderBoard();
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+
+function calcRag(task) {
+  if (task.rag) return task.rag;
+  if (!task.due_date) return "ontrack";
+  const diff = (new Date(task.due_date) - new Date()) / 86400000;
+  if (diff < 0) return "blocked";
+  if (diff < 3) return "atrisk";
+  return "ontrack";
+}
+
+function fmtDate(d) {
+  if (!d) return "";
+  return new Date(d + "T12:00:00").toLocaleDateString("en-GB", { day:"numeric", month:"short" });
+}
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function showErr(msg) {
+  const el = document.getElementById("err-banner");
+  el.textContent = "⚠ " + msg; el.style.display = "block";
+  setTimeout(() => el.style.display = "none", 5000);
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2500);
+}
+</script>
+
+</body>
+</html>
